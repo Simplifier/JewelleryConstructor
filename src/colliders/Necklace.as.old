@@ -1,0 +1,678 @@
+package {
+	import com.greensock.TweenLite;
+	import flash.display.Bitmap;
+	import flash.display.Loader;
+	import flash.events.Event;
+	import flash.events.MouseEvent;
+	import flash.geom.Point;
+	import flash.net.URLRequest;
+	
+	public class Necklace extends Collider {
+		private var straightHeight:Number = 170;
+		private var majorRadius:int = 190;
+		private var minorRadius:int = 185;
+		
+		private var currentParticle:Particle;
+		private var particleIsSnapped:Boolean;
+		private var particles:Vector.<Particle> = new Vector.<Particle>;
+		private var beads:Vector.<Bead> = new Vector.<Bead>;
+		private var locks:Vector.<Lock> = new Vector.<Lock>;
+		
+		private var side:String;
+		private const LEFT_SIDE:String = 'leftSide';
+		private const RIGHT_SIDE:String = 'rightSide';
+		
+		public function Necklace(url:String):void {
+			realWidth = 400;
+			//graphics.lineStyle(2);
+			//graphics.drawEllipse(-majorRadius, -minorRadius, 2 * majorRadius, 2 * minorRadius);
+			var loader:Loader = new Loader;
+			loader.load(new URLRequest('pics/ncklace.jpg'));
+			loader.contentLoaderInfo.addEventListener(Event.COMPLETE, onLoadComplete);
+			
+			addEventListener(Event.ENTER_FRAME, updateFrame);
+		}
+		
+		private function onLoadComplete(e:Event):void {
+			var loader:Loader = e.target.loader as Loader;
+			loader.contentLoaderInfo.removeEventListener(Event.COMPLETE, onLoadComplete);
+			loader.width = realWidth;
+			loader.scaleY = loader.scaleX;
+			loader.x = -loader.width / 2;
+			loader.y = -straightHeight;
+			Bitmap(loader.content).smoothing = true;
+			addChild(loader);
+		}
+		
+		override public function destroy():void {
+			removeEventListener(Event.ENTER_FRAME, updateFrame);
+		}
+		
+		/**returns point situated on the bracelet
+		 * @param parameter the angle in degrees
+		 * */
+		public function parameterToCoords(parameter:Number):Point {
+			var res:Point = new Point;
+			
+			if (parameter >= 90) {
+				res.x = -majorRadius;
+				res.y = -(parameter - 90) / 90 * straightHeight;
+			} else if (parameter < -90) {
+				res.x = majorRadius;
+				res.y = -(90 - (parameter + 180)) / 90 * straightHeight;
+			} else {
+				res.x = majorRadius * Math.cos(parameter * Math.PI / 180 + Math.PI / 2);
+				res.y = minorRadius * Math.sin(parameter * Math.PI / 180 + Math.PI / 2);
+			}
+			return res;
+		}
+		
+		/**returns the angle in degrees*/
+		public function coordsToParameter(x:Number, y:Number):Number {
+			if (y < 0) {
+				if (x < 0) {
+					return 90 - y / straightHeight * 90;
+				} else {
+					return -180 + (straightHeight + y) / straightHeight * 90;
+				}
+			} else
+				return Math.atan2(y, x) * 180 / Math.PI - 90;
+		}
+		
+		override public function addBeadHandling(bead:Bead):void {
+			stage.addEventListener(MouseEvent.MOUSE_MOVE, onMouseMove);
+			stage.addEventListener(MouseEvent.MOUSE_UP, onMouseUp);
+			bead.addEventListener(MouseEvent.MOUSE_DOWN, onBallMouseDown);
+			
+			bead.x = mouseX;
+			bead.y = mouseY;
+			addChild(bead);
+			this.currentParticle = bead;
+		
+		}
+		
+		override public function addLockHandling(lock:Lock):void {
+			stage.addEventListener(MouseEvent.MOUSE_MOVE, onMouseMove);
+			stage.addEventListener(MouseEvent.MOUSE_UP, onMouseUp);
+			lock.addEventListener(MouseEvent.MOUSE_DOWN, onBallMouseDown);
+			
+			lock.x = mouseX;
+			lock.y = mouseY;
+			addChild(lock);
+			this.currentParticle = lock;
+		}
+		
+		private function onBallMouseDown(e:MouseEvent):void {
+			stage.addEventListener(MouseEvent.MOUSE_MOVE, onMouseMove);
+			stage.addEventListener(MouseEvent.MOUSE_UP, onMouseUp);
+			
+			currentParticle = e.target as Particle;
+			addChild(currentParticle);
+			var i:String;
+			for (i in beads) {
+				if (beads[i] == currentParticle) {
+					beads.splice(int(i), 1);
+					break;
+				}
+			}
+			for (i in particles) {
+				if (particles[i] == currentParticle) {
+					particles.splice(int(i), 1);
+					break;
+				}
+			}
+		}
+		
+		private function onMouseMove(e:MouseEvent):void {
+			if (mouseY < 0) {
+				if (Math.abs(majorRadius - Math.abs(mouseX)) < 50)
+					particleIsSnapped = true;
+				else
+					particleIsSnapped = false;
+				if (mouseY < -straightHeight)
+					particleIsSnapped = false;
+				
+				//currentBead.rotation = (mouseX < 0) ? 90 : -90;
+				TweenLite.to(currentParticle, .1, {rotation: (mouseX < 0) ? 90 : -90});
+				if (particleIsSnapped) {
+					currentParticle.alpha = 1;
+					TweenLite.to(currentParticle, .1, {x: (mouseX < 0) ? -majorRadius : majorRadius, y: mouseY, overwrite: false});
+				} else {
+					currentParticle.alpha = .5;
+					TweenLite.to(currentParticle, .1, {x: mouseX, y: mouseY, overwrite: false});
+				}
+			} else {
+				var angle:Number = Math.atan2(mouseY, mouseX);
+				//currentBead.rotation = angle * 180 / Math.PI - 90;
+				TweenLite.to(currentParticle, .1, {rotation: angle * 180 / Math.PI - 90});
+				
+				var dist:Number = Math.sqrt(mouseX * mouseX + mouseY * mouseY);
+				var ellipseX:Number = majorRadius * Math.cos(angle);
+				var ellipseY:Number = minorRadius * Math.sin(angle);
+				var localRadius:Number = Math.sqrt(ellipseX * ellipseX + ellipseY * ellipseY);
+				
+				if (Math.abs(dist - localRadius) < 50)
+					particleIsSnapped = true;
+				else
+					particleIsSnapped = false;
+				
+				if (particleIsSnapped) {
+					currentParticle.alpha = 1;
+					TweenLite.to(currentParticle, .1, {x: ellipseX, y: ellipseY, overwrite: false});
+				} else {
+					currentParticle.alpha = .5;
+					TweenLite.to(currentParticle, .1, {x: mouseX, y: mouseY, overwrite: false});
+				}
+			}
+			
+			e.updateAfterEvent();
+		}
+		
+		private function onMouseUp(e:MouseEvent):void {
+			stage.removeEventListener(MouseEvent.MOUSE_MOVE, onMouseMove);
+			stage.removeEventListener(MouseEvent.MOUSE_UP, onMouseUp);
+			if (!currentParticle)
+				return;
+			
+			if (particleIsSnapped) {
+				particles.push(currentParticle);
+				currentParticle.initAngle(coordsToParameter(mouseX, mouseY));
+				if (currentParticle is Bead) {
+					trace('init angle:', coordsToParameter(mouseX, mouseY))
+					beads.push(Bead(currentParticle));
+				} else if (currentParticle is Lock) {
+					locks.push(Lock(currentParticle));
+				}
+			} else {
+				TweenLite.to(currentParticle, .3, {rotation: "-90", scaleX: 0, scaleY: 0, onComplete: removeChild, onCompleteParams: [currentParticle]});
+				currentParticle.removeEventListener(MouseEvent.MOUSE_DOWN, onBallMouseDown);
+			}
+			currentParticle = null;
+		}
+		
+		private function updateFrame(e:Event):void {
+			if (!beads.length)
+				return;
+			
+			beads = beads.sort(compareParticles);
+			particles = particles.sort(compareParticles);
+			
+			var b:Bead;
+			for each (b in beads) {
+				applyGravity(b);
+				b.velocityBeforeExchange = b.velocity;
+			}
+			//trace(particles)
+			handleCollisions();
+		}
+		
+		private function handleCollisions():void {
+			var bead1st:Particle;
+			var bead2nd:Particle;
+			var bead1Interval:Vector.<Number>;
+			var bead2Interval:Vector.<Number>;
+			var necklacePnt:Point;
+			var tempv:Number;
+			var i:int;
+			var j:int;
+			
+			//trace(1, particles[0].angle)
+			for (i = 0; i < particles.length; i++) {
+				bead1st = particles[i];
+				bead1Interval = getAngleInterval(new Point(bead1st.x, bead1st.y), bead1st.angle, bead1st.radius);
+				if (bead1st.velocityBeforeExchange > 0) {
+					if (i >= particles.length - 1)
+						continue;
+					
+					bead2nd = particles[i + 1];
+					bead2Interval = getAngleInterval(new Point(bead2nd.x, bead2nd.y), bead2nd.angle, bead2nd.radius);
+					
+					if (bead1st.angle > bead2nd.angle || bead1Interval[1] > bead2Interval[0]) {
+						if (bead2nd.velocityBeforeExchange >= 0)
+							bead1st.angle -= bead1Interval[1] - bead2Interval[0];
+						else {
+							bead1st.angle -= (bead1Interval[1] - bead2Interval[0]) * Math.abs(bead1st.velocityBeforeExchange) / (Math.abs(bead1st.velocityBeforeExchange) + Math.abs(bead2nd.velocityBeforeExchange));
+							bead2nd.angle += (bead1Interval[1] - bead2Interval[0]) * Math.abs(bead2nd.velocityBeforeExchange) / (Math.abs(bead1st.velocityBeforeExchange) + Math.abs(bead2nd.velocityBeforeExchange));
+						}
+						/*if (bead1st.angle < bead1st.prevAngle) {
+						   //bead1st.angle = bead1st.prevAngle;
+						 }*/
+						//if(i==beads.length-2)trace('b',beads);
+						
+						necklacePnt = parameterToCoords(bead1st.angle);
+						bead1st.x = necklacePnt.x;
+						bead1st.y = necklacePnt.y;
+						
+						necklacePnt = parameterToCoords(bead2nd.angle);
+						bead2nd.x = necklacePnt.x;
+						bead2nd.y = necklacePnt.y;
+						
+						if (bead1st.y < 0) {
+							bead1st.rotation = (bead1st.x < 0) ? 90 : -90;
+						} else {
+							bead1st.rotation = bead1st.angle;
+						}
+						if (bead2nd.y < 0) {
+							bead2nd.rotation = (bead2nd.x < 0) ? 90 : -90;
+						} else {
+							bead2nd.rotation = bead2nd.angle;
+						}
+						if (bead1st is Lock) {
+							Bead(bead2nd).velocity *= -.5;
+						} else if (bead2nd is Lock) {
+							Bead(bead1st).velocity *= -.5;
+						} else {
+							tempv = bead1st.velocity;
+							Bead(bead1st).velocity = bead2nd.velocity * .9;
+							Bead(bead2nd).velocity = tempv * .9;
+						}
+						
+						for (j = i - 1; j >= 0; j--) {
+							if (!divorceBalls(particles, j))
+								break;
+							if (j == i - 1) {
+								if ((particles[j].velocityBeforeExchange > 0 || particles[j] is Lock) && particles[j].angle < particles[j].prevAngle) {
+									bead1st = particles[j];
+									bead1st.angle = bead1st.prevAngle;
+									
+									necklacePnt = parameterToCoords(bead1st.angle);
+									bead1st.x = necklacePnt.x;
+									bead1st.y = necklacePnt.y;
+									
+									if (bead1st.y < 0) {
+										bead1st.rotation = (bead1st.x < 0) ? 90 : -90;
+									} else {
+										bead1st.rotation = bead1st.angle;
+									}
+									bead1Interval = getAngleInterval(new Point(bead1st.x, bead1st.y), bead1st.angle, bead1st.radius);
+									
+									bead2nd = particles[j + 1];
+									bead2Interval = getAngleInterval(new Point(bead2nd.x, bead2nd.y), bead2nd.angle, bead2nd.radius);
+									
+									bead2nd.angle += bead1Interval[1] - bead2Interval[0];
+									
+									necklacePnt = parameterToCoords(bead2nd.angle);
+									bead2nd.x = necklacePnt.x;
+									bead2nd.y = necklacePnt.y;
+									
+									if (bead2nd.y < 0) {
+										bead2nd.rotation = (bead2nd.x < 0) ? 90 : -90;
+									} else {
+										bead2nd.rotation = bead2nd.angle;
+									}
+									
+									bead1st = particles[j + 1];
+									bead1Interval = getAngleInterval(new Point(bead1st.x, bead1st.y), bead1st.angle, bead1st.radius);
+									
+									bead2nd = particles[j + 2];
+									bead2Interval = getAngleInterval(new Point(bead2nd.x, bead2nd.y), bead2nd.angle, bead2nd.radius);
+									
+									bead2nd.angle += bead1Interval[1] - bead2Interval[0];
+									
+									necklacePnt = parameterToCoords(bead2nd.angle);
+									bead2nd.x = necklacePnt.x;
+									bead2nd.y = necklacePnt.y;
+									
+									if (bead2nd.y < 0) {
+										bead2nd.rotation = (bead2nd.x < 0) ? 90 : -90;
+									} else {
+										bead2nd.rotation = bead2nd.angle;
+									}
+								}
+							}
+						}
+					}
+				} else if (bead1st.velocityBeforeExchange < 0) {
+					if (i <= 0)
+						continue;
+					bead2nd = particles[i - 1];
+					bead2Interval = getAngleInterval(new Point(bead2nd.x, bead2nd.y), bead2nd.angle, bead2nd.radius);
+					
+					if (bead1st.angle < bead2nd.angle || bead1Interval[0] < bead2Interval[1]) {
+						if (bead2nd.velocityBeforeExchange <= 0)
+							bead1st.angle += bead2Interval[1] - bead1Interval[0];
+						else {
+							bead1st.angle += (bead2Interval[1] - bead1Interval[0]) * Math.abs(bead1st.velocityBeforeExchange) / (Math.abs(bead1st.velocityBeforeExchange) + Math.abs(bead2nd.velocityBeforeExchange));
+							bead2nd.angle -= (bead2Interval[1] - bead1Interval[0]) * Math.abs(bead2nd.velocityBeforeExchange) / (Math.abs(bead1st.velocityBeforeExchange) + Math.abs(bead2nd.velocityBeforeExchange));
+						}
+						/*if (bead1st.angle > bead1st.prevAngle) {
+						   //bead1st.angle = bead1st.prevAngle;
+						   //trace(2222222222222222222222)
+						 }*/
+						//if(i==beads.length-1)trace('a',beads);
+						
+						necklacePnt = parameterToCoords(bead1st.angle);
+						bead1st.x = necklacePnt.x;
+						bead1st.y = necklacePnt.y;
+						
+						necklacePnt = parameterToCoords(bead2nd.angle);
+						bead2nd.x = necklacePnt.x;
+						bead2nd.y = necklacePnt.y;
+						
+						if (bead1st.y < 0) {
+							bead1st.rotation = (bead1st.x < 0) ? 90 : -90;
+						} else {
+							bead1st.rotation = bead1st.angle;
+						}
+						if (bead2nd.y < 0) {
+							bead2nd.rotation = (bead2nd.x < 0) ? 90 : -90;
+						} else {
+							bead2nd.rotation = bead2nd.angle;
+						}
+						if (bead1st is Lock) {
+							Bead(bead2nd).velocity *= -.5;
+						} else if (bead2nd is Lock) {
+							Bead(bead1st).velocity *= -.5;
+						} else {
+							tempv = bead1st.velocity;
+							Bead(bead1st).velocity = bead2nd.velocity * .9;
+							Bead(bead2nd).velocity = tempv * .9;
+						}
+						
+						for (j = i - 1; j >= 0; j--) {
+							if (!divorceBalls(particles, j))
+								break;
+							if (j == i - 1) {
+								if ((particles[j].velocityBeforeExchange > 0 || particles[j] is Lock) && particles[j].angle < particles[j].prevAngle) {
+									bead1st = particles[j];
+									bead1st.angle = bead1st.prevAngle;
+									
+									necklacePnt = parameterToCoords(bead1st.angle);
+									bead1st.x = necklacePnt.x;
+									bead1st.y = necklacePnt.y;
+									
+									if (bead1st.y < 0) {
+										bead1st.rotation = (bead1st.x < 0) ? 90 : -90;
+									} else {
+										bead1st.rotation = bead1st.angle;
+									}
+									bead1Interval = getAngleInterval(new Point(bead1st.x, bead1st.y), bead1st.angle, bead1st.radius);
+									
+									bead2nd = particles[j + 1];
+									bead2Interval = getAngleInterval(new Point(bead2nd.x, bead2nd.y), bead2nd.angle, bead2nd.radius);
+									
+									bead2nd.angle += bead1Interval[1] - bead2Interval[0];
+									
+									necklacePnt = parameterToCoords(bead2nd.angle);
+									bead2nd.x = necklacePnt.x;
+									bead2nd.y = necklacePnt.y;
+									
+									if (bead2nd.y < 0) {
+										bead2nd.rotation = (bead2nd.x < 0) ? 90 : -90;
+									} else {
+										bead2nd.rotation = bead2nd.angle;
+									}
+									
+									bead1st = particles[j + 1];
+									bead1Interval = getAngleInterval(new Point(bead1st.x, bead1st.y), bead1st.angle, bead1st.radius);
+									
+									bead2nd = particles[j + 2];
+									bead2Interval = getAngleInterval(new Point(bead2nd.x, bead2nd.y), bead2nd.angle, bead2nd.radius);
+									
+									bead2nd.angle += bead1Interval[1] - bead2Interval[0];
+									
+									necklacePnt = parameterToCoords(bead2nd.angle);
+									bead2nd.x = necklacePnt.x;
+									bead2nd.y = necklacePnt.y;
+									
+									if (bead2nd.y < 0) {
+										bead2nd.rotation = (bead2nd.x < 0) ? 90 : -90;
+									} else {
+										bead2nd.rotation = bead2nd.angle;
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+			
+			i = 0;
+			var part:Particle;
+			var bead:Bead;
+			for each (part in particles) {
+				if (i > 0) {
+					bead2nd = particles[i - 1];
+					bead1Interval = getAngleInterval(new Point(part.x, part.y), part.angle, part.radius);
+					bead2Interval = getAngleInterval(new Point(bead2nd.x, bead2nd.y), bead2nd.angle, bead2nd.radius);
+					if (bead1Interval[0] < bead2Interval[1]) {
+						if (part is Lock)
+							bead2nd.angle -= bead2Interval[1] - bead1Interval[0];
+						else
+							part.angle += bead2Interval[1] - bead1Interval[0];
+					}
+					
+					if (part.velocityBeforeExchange > 0 && part.angle < part.prevAngle) {
+						//trace('aleeeeert!!!');
+						part.angle = part.prevAngle;
+					}
+					necklacePnt = parameterToCoords(part.angle);
+					part.x = necklacePnt.x;
+					part.y = necklacePnt.y;
+					
+					necklacePnt = parameterToCoords(bead2nd.angle);
+					bead2nd.x = necklacePnt.x;
+					bead2nd.y = necklacePnt.y;
+					
+					if (part.y < 0) {
+						part.rotation = (part.x < 0) ? 90 : -90;
+					} else {
+						part.rotation = part.angle;
+					}
+					if (bead2nd.y < 0) {
+						bead2nd.rotation = (bead2nd.x < 0) ? 90 : -90;
+					} else {
+						bead2nd.rotation = bead2nd.angle;
+					}
+				}
+				//i++;
+				
+				if (part is Bead) {
+					bead = Bead(part);
+					if (bead.angle < 0)
+						bead.acceleration = Math.abs(bead.acceleration);
+					else
+						bead.acceleration = -Math.abs(bead.acceleration);
+					bead.prevAngle = bead.angle;
+				}
+			}
+			//trace(beads[0].angle)
+		}
+		
+		private function divorceBalls(particles:Vector.<Particle>, currentIndex:int):Boolean {
+			var bead1st:Particle;
+			var bead2nd:Particle;
+			var bead1Interval:Vector.<Number>;
+			var bead2Interval:Vector.<Number>;
+			var necklacePnt:Point;
+			
+			bead1st = particles[currentIndex];
+			bead1Interval = getAngleInterval(new Point(bead1st.x, bead1st.y), bead1st.angle, bead1st.radius);
+			
+			bead2nd = particles[currentIndex + 1];
+			bead2Interval = getAngleInterval(new Point(bead2nd.x, bead2nd.y), bead2nd.angle, bead2nd.radius);
+			
+			if (bead1st.angle > bead2nd.angle || bead1Interval[1] > bead2Interval[0]) {
+				if (bead1st is Lock)
+					bead2nd.angle += bead1Interval[1] - bead2Interval[0];
+				else
+					bead1st.angle -= bead1Interval[1] - bead2Interval[0];
+				
+				necklacePnt = parameterToCoords(bead1st.angle);
+				bead1st.x = necklacePnt.x;
+				bead1st.y = necklacePnt.y;
+				
+				necklacePnt = parameterToCoords(bead2nd.angle);
+				bead2nd.x = necklacePnt.x;
+				bead2nd.y = necklacePnt.y;
+				
+				if (bead1st.y < 0) {
+					bead1st.rotation = (bead1st.x < 0) ? 90 : -90;
+				} else {
+					bead1st.rotation = bead1st.angle;
+				}
+				if (bead2nd.y < 0) {
+					bead2nd.rotation = (bead2nd.x < 0) ? 90 : -90;
+				} else {
+					bead2nd.rotation = bead2nd.angle;
+				}
+				
+				return true;
+			}
+			/*if (bead1st.velocity > 0) {
+			   if (currentIndex >= balls.length - 1)
+			   return false;
+			
+			   bead2nd = balls[currentIndex + 1];
+			   bead2Interval = getAngleInterval(bead2nd.angle, bead2nd.radius);
+			
+			   if (bead1st.angle > bead2nd.angle || bead1Interval[1] > bead2Interval[0]) {
+			   if(bead2nd.velocity>=0)
+			   bead1st.angle -= bead1Interval[1] - bead2Interval[0];
+			   else {
+			   bead1st.angle -= (bead1Interval[1] - bead2Interval[0]) * Math.abs(bead1st.velocity) / (Math.abs(bead1st.velocity) + Math.abs(bead2nd.velocity));
+			   bead2nd.angle += (bead1Interval[1] - bead2Interval[0]) * Math.abs(bead2nd.velocity) / (Math.abs(bead1st.velocity) + Math.abs(bead2nd.velocity));
+			   }
+			   if (bead1st.angle < bead1st.prevAngle) {
+			   //bead1st.angle = bead1st.prevAngle;
+			   }
+			
+			   necklacePnt = parameterToCoords(bead1st.angle);
+			   bead1st.x = necklacePnt.x;
+			   bead1st.y = necklacePnt.y;
+			
+			   necklacePnt = parameterToCoords(bead2nd.angle);
+			   bead2nd.x = necklacePnt.x;
+			   bead2nd.y = necklacePnt.y;
+			
+			   if (bead1st.y < 0) {
+			   bead1st.rotation = (bead1st.x < 0) ? 90 : -90;
+			   } else {
+			   bead1st.rotation = bead1st.angle;
+			   }
+			   if (bead2nd.y < 0) {
+			   bead2nd.rotation = (bead2nd.x < 0) ? 90 : -90;
+			   } else {
+			   bead2nd.rotation = bead2nd.angle;
+			   }
+			
+			   return true;
+			   }
+			   } else {
+			   if (currentIndex <= 0)
+			   return false;
+			
+			   bead2nd = balls[currentIndex - 1];
+			   bead2Interval = getAngleInterval(bead2nd.angle, bead2nd.radius);
+			
+			   if (bead1st.angle < bead2nd.angle || bead1Interval[0] < bead2Interval[1]) {
+			   if(bead2nd.velocity<=0)
+			   bead1st.angle += bead2Interval[1] - bead1Interval[0];
+			   else {
+			   bead1st.angle += (bead2Interval[1] - bead1Interval[0]) * Math.abs(bead1st.velocity) / (Math.abs(bead1st.velocity) + Math.abs(bead2nd.velocity));
+			   bead2nd.angle -= (bead2Interval[1] - bead1Interval[0]) * Math.abs(bead2nd.velocity) / (Math.abs(bead1st.velocity) + Math.abs(bead2nd.velocity));
+			   }
+			   if (bead1st.angle > bead1st.prevAngle) {
+			   //bead1st.angle = bead1st.prevAngle;
+			   //trace(2222222222222222222222)
+			   }
+			
+			   necklacePnt = parameterToCoords(bead1st.angle);
+			   bead1st.x = necklacePnt.x;
+			   bead1st.y = necklacePnt.y;
+			
+			   necklacePnt = parameterToCoords(bead2nd.angle);
+			   bead2nd.x = necklacePnt.x;
+			   bead2nd.y = necklacePnt.y;
+			
+			   if (bead1st.y < 0) {
+			   bead1st.rotation = (bead1st.x < 0) ? 90 : -90;
+			   } else {
+			   bead1st.rotation = bead1st.angle;
+			   }
+			   if (bead2nd.y < 0) {
+			   bead2nd.rotation = (bead2nd.x < 0) ? 90 : -90;
+			   } else {
+			   bead2nd.rotation = bead2nd.angle;
+			   }
+			
+			   return true;
+			   }
+			 }*/
+			return false;
+		}
+		
+		private function getAngleInterval(pnt:Point, angle:Number, radius:Number):Vector.<Number> {
+			//var pnt:Point = parameterToCoords(angle);
+			var topPnt:Point;
+			var botPnt:Point;
+			if (angle < -90) {
+				topPnt = new Point(pnt.x, pnt.y - radius);
+				botPnt = new Point(pnt.x, pnt.y + radius);
+				return new <Number>[coordsToParameter(topPnt.x, topPnt.y), coordsToParameter(botPnt.x, botPnt.y)];
+			} else if (angle >= 90) {
+				topPnt = new Point(pnt.x, pnt.y - radius);
+				botPnt = new Point(pnt.x, pnt.y + radius);
+				return new <Number>[coordsToParameter(botPnt.x, botPnt.y), coordsToParameter(topPnt.x, topPnt.y)];
+			} else {
+				var pnt1:Point = new Point(10, minorRadius * minorRadius / pnt.y * (1 - pnt.x / majorRadius / majorRadius * (pnt.x + 10)) - pnt.y);
+				var pnt2:Point = new Point(-10, minorRadius * minorRadius / pnt.y * (1 - pnt.x / majorRadius / majorRadius * (pnt.x - 10)) - pnt.y);
+				
+				var length:Number = Math.sqrt(pnt1.x * pnt1.x + pnt1.y * pnt1.y);
+				
+				var leftAngle:Number = coordsToParameter(pnt.x + pnt1.x / length * radius, pnt.y + pnt1.y / length * radius);
+				var rightAngle:Number = coordsToParameter(pnt.x + pnt2.x / length * radius, pnt.y + pnt2.y / length * radius);
+				
+				return new <Number>[Math.min(leftAngle, rightAngle), Math.max(leftAngle, rightAngle)];
+			}
+		}
+		
+		private function applyGravity(bead:Bead):void {
+			var necklacePnt:Point;
+			if (bead.y < 0) {
+				if (bead.y < -straightHeight) {
+					bead.y = -straightHeight;
+					bead.velocity *= -1;
+				}
+				bead.x = (bead.x < 0) ? -majorRadius : majorRadius;
+				bead.velocity += bead.acceleration;
+				bead.angle += bead.velocity;
+				
+				necklacePnt = parameterToCoords(bead.angle);
+				
+				bead.x = necklacePnt.x;
+				bead.y = necklacePnt.y;
+				
+				//if(bead.x < 0)bead.y -= bead.velocity*Math.PI*(majorRadius+minorRadius)/360;/*multiply the velocity by a lenght of 1 degree*/
+				//else bead.y += bead.velocity*Math.PI*(majorRadius+minorRadius)/360;
+				bead.rotation = (bead.x < 0) ? 90 : -90;
+			} else {
+				var slideAngle:Number = bead.angle;
+				if (slideAngle > 90)
+					slideAngle -= 180;
+				else if (slideAngle < -90)
+					slideAngle += 180;
+				slideAngle = Math.abs(slideAngle);
+				
+				bead.velocity += bead.acceleration * Math.sin(slideAngle * Math.PI / 180);
+				var friction:Number = ((bead.velocity > 0) ? 1 : -1) * Math.abs(bead.acceleration) * Math.cos(slideAngle * Math.PI / 180) * .3;
+				bead.velocity = (Math.abs(bead.velocity) - Math.abs(friction)) > 0 ? bead.velocity - friction : 0;
+				bead.angle += bead.velocity;
+				
+				necklacePnt = parameterToCoords(bead.angle);
+				
+				bead.x = necklacePnt.x;
+				bead.y = necklacePnt.y;
+				bead.rotation = bead.angle;
+				
+				/*if ((bead.angle > 0 && bead.angle < 90 && bead.prevAngle < 0 && bead.prevAngle > -90) || (bead.angle < 0 && bead.angle > -90 && bead.prevAngle > 0 && bead.prevAngle < 90)) {
+				   bead.acceleration *= -1;
+				 }*/
+			}
+		}
+		
+		private function compareParticles(a:Particle, b:Particle):Number {
+			return a.angle - b.angle;
+		}
+	}
+}
